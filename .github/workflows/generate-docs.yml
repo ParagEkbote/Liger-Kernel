@@ -25,7 +25,7 @@ jobs:
       - name: Generate Documentation
         run: |
           mkdir -p docs  # Create the docs directory if it doesn't exist
-          pdoc --output-dir docs ./src ./benchmark ./examples ./test --force  # Include all specified module paths and force generation
+          pdoc --output-dir docs ./src ./benchmark ./examples ./test  # Include all specified module paths
 
       - name: Upload Documentation
         uses: peaceiris/actions-gh-pages@v3
