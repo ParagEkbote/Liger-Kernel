@@ -16,15 +16,15 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'  # Use a specific version, like '3.8' or '3.9'
+          python-version: '3.x'  # Use a specific version, like '3.8' or '3.9'
 
       - name: Install Dependencies
         run: |
-          pip install pdoc
+          pip install pdoc matplotlib  # Add other dependencies as needed
 
       - name: Generate Documentation
         run: |
-          pdoc --output-dir docs  ./benchmark ./examples ./test ./src 
+          pdoc --output-dir docs ./liger_kernel ./benchmark ./examples ./test  # Include all specified module paths
 
       - name: Upload Documentation
         uses: peaceiris/actions-gh-pages@v3
