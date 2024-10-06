@@ -3,7 +3,7 @@ name: Generate Documentation
 on:
   push:
     branches:
-      - main  # Change to the branch you want to trigger the action
+      - main  # Trigger on push to the main branch
 
 jobs:
   build:
@@ -16,15 +16,16 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Specify the Python version to use
+          python-version: '3.10'  # Specify the Python version
 
       - name: Install Dependencies
         run: |
-          pip install pdoc matplotlib pandas seaborn torch utils  # Add other dependencies as needed
+          pip install pdoc matplotlib pandas seaborn torch utils  # Ensure all dependencies are correctly specified
 
       - name: Generate Documentation
         run: |
-          pdoc --output-dir docs ./src ./benchmark ./examples ./test  # Generate documentation for specified modules
+          mkdir -p docs  # Create the docs directory if it doesn't exist
+          pdoc --output-dir docs ./src ./benchmark ./examples ./test --force  # Include all specified module paths and force generation
 
       - name: Upload Documentation
         uses: peaceiris/actions-gh-pages@v3
