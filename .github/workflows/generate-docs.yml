@@ -1,0 +1,33 @@
+name: Generate Documentation
+
+on:
+  push:
+    branches:
+      - main  # Change to the branch you want to trigger the action
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'  # Use a specific version, like '3.8' or '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install pdoc
+
+      - name: Generate Documentation
+        run: |
+          pdoc --output-dir docs  ./benchmark ./examples ./test ./src 
+
+      - name: Upload Documentation
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
