@@ -42,3 +42,6 @@ pythonpath = [
 asyncio_mode = "auto"
 log_cli = true
 log_cli_level = "INFO"
+
+# Optional keywords for better discoverability
+keywords = ["LLM", "Triton", "machine learning"]

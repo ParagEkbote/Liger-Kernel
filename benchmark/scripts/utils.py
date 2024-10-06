@@ -3,6 +3,7 @@ import csv
 import json
 import os
 import time
+import logging
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from importlib.metadata import version
@@ -11,10 +12,11 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 
+# Set up logging configuration
+logging.basicConfig(level=logging.INFO)
+
 LIGER_KERNEL_VERSION = version("liger-kernel")
-
 QUANTILES = [0.5, 0.2, 0.8]
-
 
 @dataclass
 class SingleBenchmarkRunInput:
@@ -22,7 +24,6 @@ class SingleBenchmarkRunInput:
     kernel_provider: str
     kernel_operation_mode: Optional[str] = ""
     extra_benchmark_config: Optional[Dict[str, Any]] = None
-
 
 @dataclass
 class SingleBenchmarkRunOutput:
@@ -33,14 +34,12 @@ class SingleBenchmarkRunOutput:
     # 80th percentile
     y_80: float
 
-
 @dataclass
 class BenchmarkData:
     """
-    BenchmarkData is a dataclass to store the benchmark data for a a completed benchmark
+    BenchmarkData is a dataclass to store the benchmark data for a completed benchmark
     run on all x-values for a given kernel/kernel operation mode/metric/extra_benchmark_config
     """
-
     kernel_name: str
     kernel_provider: str
     metric_name: str
@@ -57,13 +56,11 @@ class BenchmarkData:
     extra_benchmark_config_str: Optional[str] = None
     liger_version: str = LIGER_KERNEL_VERSION
 
-
 @dataclass
 class BenchmarkDataCSVRow:
-    # The ordering of field names here will be the order of columns in the CSV
     kernel_name: str
     kernel_provider: str
-    kernel_operation_mode: Union[str, None]
+    kernel_operation_mode: Optional[str]
     metric_name: str
     metric_unit: str
     x_name: str
@@ -72,11 +69,10 @@ class BenchmarkDataCSVRow:
     y_value_50: float
     y_value_20: float
     y_value_80: float
-    extra_benchmark_config_str: Union[str, None]
+    extra_benchmark_config_str: Optional[str]
     gpu_name: str
     timestamp: str
     liger_version: str
-
 
 def _test_memory(
     func: Callable,
@@ -84,69 +80,66 @@ def _test_memory(
     quantiles: Optional[List[float]] = None,
     return_mode="mean",
 ) -> float:
-    assert return_mode in ["min", "max", "mean", "median"]
+    """
+    Tests the memory usage of a given function over a specified number of iterations.
+    
+    Args:
+        func (Callable): The function to be tested.
+        _iter (int): Number of iterations to test memory.
+        quantiles (Optional[List[float]]): List of quantiles to compute.
+        return_mode (str): Specifies the aggregation method for memory (min, max, mean, median).
+
+    Returns:
+        float or List[float]: Memory usage statistics.
+    """
+    assert return_mode in ["min", "max", "mean", "median"], "Invalid return mode"
+    
     total_mem = []
 
     for _ in range(_iter):
         torch.cuda.memory.reset_peak_memory_stats()
         func()
-        # Convert to MB
-        mem = torch.cuda.max_memory_allocated() / 2**20
+        mem = torch.cuda.max_memory_allocated() / 2**20  # Convert to MB
         total_mem.append(mem)
 
     total_mem = torch.tensor(total_mem, dtype=torch.float)
-    if quantiles is not None:
-        quantiles_data = torch.quantile(
-            total_mem, torch.tensor(quantiles, dtype=torch.float)
-        ).tolist()
-        if len(quantiles_data) == 1:
-            quantiles_data = quantiles_data[0]
-        return quantiles_data
+    
+    if quantiles:
+        quantiles_data = torch.quantile(total_mem, torch.tensor(quantiles, dtype=torch.float)).tolist()
+        return quantiles_data[0] if len(quantiles_data) == 1 else quantiles_data
+    
     return getattr(torch, return_mode)(total_mem).item()
 
-
 def get_current_file_directory() -> str:
-    """
-    Returns the directory path of the current Python file.
-    """
-    # Get the absolute path of the current file
+    """Returns the directory path of the current Python file."""
     current_file_path = os.path.abspath(__file__)
-
-    # Get the directory path of the current file
     return os.path.dirname(current_file_path)
 
-
 def sleep(seconds):
+    """Decorator to pause execution for a specified number of seconds."""
     def decorator(function):
         def wrapper(*args, **kwargs):
             time.sleep(seconds)
             return function(*args, **kwargs)
-
         return wrapper
-
     return decorator
 
-
 def _print_benchmarking_banner(metric_name: str, kernel_name: str):
+    """Prints a banner for the benchmarking process."""
     print("**************************************")
     print(f"     BENCHMARKING {metric_name.upper()} for {kernel_name.upper()}")
     print("**************************************")
 
-
-def get_formatted_time():
+def get_formatted_time() -> str:
+    """Returns the current formatted time as a string."""
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
-
-def get_gpu_name():
-    """
-    Returns the current GPU name, formatted to serve as a directory name
-    """
+def get_gpu_name() -> str:
+    """Returns the current GPU name, formatted to serve as a directory name."""
     if torch.cuda.is_available():
         gpu_name = torch.cuda.get_device_name(torch.cuda.current_device())
         return gpu_name
-    else:
-        raise Exception("Benchmarks can only be run on GPU.")
-
+    raise Exception("Benchmarks can only be run on GPU. Please ensure your environment has a GPU available.")
 
 def update_benchmark_data_csv(
     benchmark_data_list: List[BenchmarkData],
@@ -155,13 +148,19 @@ def update_benchmark_data_csv(
 ):
     """
     Update the CSV file with the new benchmark data. If the file does not exist, create it.
-    If an entry already exists for the benchmark, then overwrite it if `overwrite` is True.
+    
+    Args:
+        benchmark_data_list (List[BenchmarkData]): List of benchmark data to update.
+        filename (str): Name of the CSV file to update.
+        overwrite (bool): Whether to overwrite existing benchmark data entries.
     """
+    logging.info(f"Updating benchmark data in {filename}")
+
+    if not benchmark_data_list:
+        logging.warning("No benchmark data to update.")
+        return
 
     def create_unique_key(row):
-        # This unique key is used to determine if a benchmark run already exists in the CSV
-        # If the key is the same, then the benchmark run already exists and will optionally
-        # be overwritten. Otherwise, it is considered a new benchmark run and appended.
         return (
             row["kernel_name"],
             row["kernel_provider"],
@@ -169,31 +168,22 @@ def update_benchmark_data_csv(
             row["metric_name"],
             row["x_name"],
             str(row["x_value"]),
-            (
-                row["extra_benchmark_config_str"]
-                if row["extra_benchmark_config_str"]
-                else ""
-            ),
+            row["extra_benchmark_config_str"] if row["extra_benchmark_config_str"] else "",
             row["gpu_name"],
         )
 
     fieldnames = BenchmarkDataCSVRow.__annotations__.keys()
 
-    # Make filename path relative to current file
     filename_abs_path = os.path.join(get_current_file_directory(), "../data", filename)
     file_exists = os.path.isfile(filename_abs_path)
 
-    # Read existing data into a list of dicts
     existing_data = []
     if file_exists:
         with open(filename_abs_path, mode="r") as file:
             reader = csv.DictReader(file)
-            for row in reader:
-                existing_data.append(row)
+            existing_data = [row for row in reader]
 
-    existing_data_dict = OrderedDict(
-        (create_unique_key(row), row) for row in existing_data
-    )
+    existing_data_dict = OrderedDict((create_unique_key(row), row) for row in existing_data)
 
     for benchmark_data in benchmark_data_list:
         benchmark_data_dict = asdict(benchmark_data)
@@ -202,10 +192,7 @@ def update_benchmark_data_csv(
         y_values_20 = benchmark_data_dict.pop("y_values_20")
         y_values_80 = benchmark_data_dict.pop("y_values_80")
 
-        # Need to convert benchmark_data into multiple rows based on x_values and y_values
-        for x_value, y_value_50, y_value_20, y_value_80 in zip_longest(
-            x_values, y_values_50, y_values_20, y_values_80
-        ):
+        for x_value, y_value_50, y_value_20, y_value_80 in zip_longest(x_values, y_values_50, y_values_20, y_values_80):
             row = BenchmarkDataCSVRow(
                 x_value=x_value,
                 y_value_50=y_value_50,
@@ -214,39 +201,31 @@ def update_benchmark_data_csv(
                 **benchmark_data_dict,
             )
             row_dict = asdict(row)
-
             row_key = create_unique_key(row_dict)
 
             if row_key in existing_data_dict:
                 if overwrite:
-                    # If overwriting, update the row
                     existing_data_dict[row_key] = row_dict
-                else:
-                    # If not overwriting, skip this row
-                    pass
             else:
                 existing_data_dict[row_key] = row_dict
 
     with open(filename_abs_path, mode="w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
-
         for row in existing_data_dict.values():
             writer.writerow(row)
-
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, torch.dtype):
             return str(obj)
-        return super().default(self, obj)
+        return super().default(obj)
 
-
-def print_benchmark_data(benchmark_data_list: List[BenchmarkData]) -> str:
+def print_benchmark_data(benchmark_data_list: List[BenchmarkData]) -> None:
+    """Prints the benchmark data in a formatted JSON style."""
     print("********** Benchmark Data **********")
     formatted_list = [obj.__dict__ for obj in benchmark_data_list]
     print(json.dumps(formatted_list, indent=2))
-
 
 def run_benchmarks(
     bench_test_fn: Callable,
@@ -257,7 +236,7 @@ def run_benchmarks(
     x_label: str,
     x_values: List[Union[float, int]],
     kernel_providers: List[str],
-    kernel_operation_modes: Optional[List[str]] = [None],
+    kernel_operation_modes: Optional[List[str]] = None,
     extra_benchmark_configs: Optional[List[Dict[str, Any]]] = None,
     overwrite: bool = False,
 ):
@@ -266,86 +245,70 @@ def run_benchmarks(
     saves data to the CSV file.
 
     Args:
-        - bench_test_fn: The benchmark test function to run. This function should take in a
-            SingleBenchmarkRunInput as input and return a SingleBenchmarkRunOutput.
-        - kernel_name: The name of the kernel being benchmarked (e.g. "swiglu")
-        - metric_name: The name of the metric being benchmarked (e.g. "speed" or "memory")
-        - metric_unit: The unit of the metric being benchmarked (e.g. "ms" or "MB")
-        - x_name: The name of the x-axis (e.g. "T" for sequence length)
-        - x_label: The label of the x-axis (e.g. "sequence length")
-        - x_values: The list of x-values to run the benchmark on (e.g. [2**i for i in range(10, 14)])
-        - kernel_providers: The list of kernel providers to run the benchmark on (e.g. ["liger", "huggingface"])
-        - kernel_operation_modes: The list of kernel operation modes to run the benchmark on (e.g. ["full", "backward"])
-        - extra_benchmark_configs: The list of extra benchmark configurations to run the benchmark on.
-        - overwrite: Whether to overwrite the existing benchmark data entry if it already exists.
+        bench_test_fn (Callable): The benchmark test function to run.
+        kernel_name (str): The name of the kernel being benchmarked.
+        metric_name (str): The name of the metric being benchmarked.
+        metric_unit (str): The unit of the metric being benchmarked.
+        x_name (str): The name of the x-axis.
+        x_label (str): The label of the x-axis.
+        x_values (List[Union[float, int]]): The list of x-values to run the benchmark on.
+        kernel_providers (List[str]): List of kernel providers.
+        kernel_operation_modes (Optional[List[str]]): List of kernel operation modes.
+        extra_benchmark_configs (Optional[List[Dict[str, Any]]]): List of extra benchmark configurations.
+        overwrite (bool): Whether to overwrite existing benchmark data entries.
     """
+    if kernel_operation_modes is None:
+        kernel_operation_modes = [None]
 
-    assert len(kernel_operation_modes) >= 1
-    assert len(kernel_providers) >= 1
+    if extra_benchmark_configs is None:
+        extra_benchmark_configs = [None]
 
-    _print_benchmarking_banner(metric_name=metric_name, kernel_name=kernel_name)
-
-    gpu_name = get_gpu_name()
     benchmark_data_list = []
-    for extra_benchmark_config in extra_benchmark_configs:
+
+    for kernel_provider in kernel_providers:
         for kernel_operation_mode in kernel_operation_modes:
-            for kernel_provider in kernel_providers:
-                y_values_50 = []
-                y_values_20 = []
-                y_values_80 = []
+            for extra_benchmark_config in extra_benchmark_configs:
+                _print_benchmarking_banner(metric_name, kernel_name)
+
+                y_values_50, y_values_20, y_values_80 = [], [], []
 
                 for x in x_values:
-                    single_benchmark_run_input = SingleBenchmarkRunInput(
-                        x=x,
-                        kernel_provider=kernel_provider,
-                        kernel_operation_mode=kernel_operation_mode,
-                        extra_benchmark_config=extra_benchmark_config,
-                    )
-                    benchmark_result: SingleBenchmarkRunOutput = bench_test_fn(
-                        single_benchmark_run_input
-                    )
-                    y_values_50.append(benchmark_result.y_50)
-                    y_values_20.append(benchmark_result.y_20)
-                    y_values_80.append(benchmark_result.y_80)
+                    input_data = SingleBenchmarkRunInput(x=x, kernel_provider=kernel_provider,
+                                                          kernel_operation_mode=kernel_operation_mode,
+                                                          extra_benchmark_config=extra_benchmark_config)
+                    outputs = bench_test_fn(input_data)
 
-                benchmark_run_data = BenchmarkData(
+                    y_values_50.append(outputs.y_50)
+                    y_values_20.append(outputs.y_20)
+                    y_values_80.append(outputs.y_80)
+
+                benchmark_data = BenchmarkData(
                     kernel_name=kernel_name,
-                    kernel_operation_mode=kernel_operation_mode,
                     kernel_provider=kernel_provider,
                     metric_name=metric_name,
                     metric_unit=metric_unit,
-                    gpu_name=gpu_name,
+                    gpu_name=get_gpu_name(),
                     x_name=x_name,
                     x_label=x_label,
                     x_values=x_values,
                     y_values_50=y_values_50,
                     y_values_20=y_values_20,
                     y_values_80=y_values_80,
-                    extra_benchmark_config_str=json.dumps(
-                        extra_benchmark_config, cls=CustomEncoder
-                    ),
                     timestamp=get_formatted_time(),
-                    liger_version=LIGER_KERNEL_VERSION,
+                    kernel_operation_mode=kernel_operation_mode,
+                    extra_benchmark_config_str=json.dumps(extra_benchmark_config, cls=CustomEncoder) if extra_benchmark_config else None
                 )
 
-                benchmark_data_list.append(benchmark_run_data)
+                benchmark_data_list.append(benchmark_data)
 
     print_benchmark_data(benchmark_data_list)
+    update_benchmark_data_csv(benchmark_data_list, overwrite=overwrite)
 
-    update_benchmark_data_csv(
-        benchmark_data_list=benchmark_data_list, overwrite=overwrite
-    )
-
-
-def parse_benchmark_script_args():
-    parser = argparse.ArgumentParser(description="Benchmarking script for Liger-Kernel")
-
-    # Add an optional --overwrite flag
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Flag to overwrite existing benchmark data with current run.",
-    )
-
+def main():
+    parser = argparse.ArgumentParser(description="Benchmarking script")
+    # Add your command-line arguments here
     args = parser.parse_args()
-    return args
+    # Call the run_benchmarks function here with the necessary parameters
+
+if __name__ == "__main__":
+    main()

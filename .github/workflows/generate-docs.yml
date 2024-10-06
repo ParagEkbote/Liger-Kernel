@@ -16,7 +16,7 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Use a specific version, like '3.8' or '3.9'
+          python-version: '3.10'  # Specify the Python version to use
 
       - name: Install Dependencies
         run: |
@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate Documentation
         run: |
-          pdoc --output-dir docs ./src ./benchmark ./examples ./test  # Include all specified module paths
+          pdoc --output-dir docs ./src ./benchmark ./examples ./test  # Generate documentation for specified modules
 
       - name: Upload Documentation
         uses: peaceiris/actions-gh-pages@v3
