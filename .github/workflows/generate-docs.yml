@@ -20,7 +20,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install pdoc matplotlib  # Add other dependencies as needed
+          pip install pdoc matplotlib pandas  # Add other dependencies as needed
 
       - name: Generate Documentation
         run: |
