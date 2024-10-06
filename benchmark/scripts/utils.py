@@ -68,7 +68,61 @@ class BenchmarkData:
     extra_benchmark_config_str: Optional[str] = None
     liger_version: str = LIGER_KERNEL_VERSION
 
-# ... [rest of the code remains the same] ...
+@dataclass
+class BenchmarkDataCSVRow:
+    kernel_name: str
+    kernel_provider: str
+    kernel_operation_mode: Optional[str]
+    metric_name: str
+    metric_unit: str
+    x_name: str
+    x_label: str
+    x_value: float
+    y_value_50: float
+    y_value_20: float
+    y_value_80: float
+    extra_benchmark_config_str: Optional[str]
+    gpu_name: str
+    timestamp: str
+    liger_version: str
+
+def test_memory(
+    func: Callable,
+    _iter: int = 10,
+    quantiles: Optional[List[float]] = None,
+    return_mode="mean",
+) -> float:
+    """
+    Tests the memory usage of a given function over a specified number of iterations.
+    
+    Args:
+        func (Callable): The function to be tested.
+        _iter (int): Number of iterations to test memory.
+        quantiles (Optional[List[float]]): List of quantiles to compute.
+        return_mode (str): Specifies the aggregation method for memory (min, max, mean, median).
+
+    Returns:
+        float or List[float]: Memory usage statistics.
+    """
+    assert return_mode in ["min", "max", "mean", "median"], "Invalid return mode"
+    
+    total_mem = []
+
+    for _ in range(_iter):
+        torch.cuda.memory.reset_peak_memory_stats()
+        func()
+        mem = torch.cuda.max_memory_allocated() / 2**20  # Convert to MB
+        total_mem.append(mem)
+
+    total_mem = torch.tensor(total_mem, dtype=torch.float)
+    
+    if quantiles:
+        quantiles_data = torch.quantile(total_mem, torch.tensor(quantiles, dtype=torch.float)).tolist()
+        return quantiles_data[0] if len(quantiles_data) == 1 else quantiles_data
+    
+    return getattr(torch, return_mode)(total_mem).item()
+
+# ... [rest of the functions remain the same] ...
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmarking script")
