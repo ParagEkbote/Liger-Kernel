@@ -2,13 +2,14 @@ import torch
 import triton
 from torch.nn import CrossEntropyLoss
 from utils import (
-    SingleBenchmarkRunInput,
     SingleBenchmarkRunOutput,
     _test_memory,
     parse_benchmark_script_args,
     run_benchmarks,
 )
 from .utils import QUANTILES
+from .utils import SingleBenchmarkRunInput  # Use relative import
+
 from liger_kernel.transformers.cross_entropy import LigerCrossEntropyLoss
 
 
