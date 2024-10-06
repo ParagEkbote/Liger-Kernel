@@ -15,7 +15,7 @@ import torch
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO)
 
-LIGER_KERNEL_VERSION = version("0.3.1")
+LIGER_KERNEL_VERSION = version("liger-kernel")
 QUANTILES = [0.5, 0.2, 0.8]
 
 @dataclass
