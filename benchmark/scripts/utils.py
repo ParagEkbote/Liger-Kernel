@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from importlib.metadata import version
 from itertools import zip_longest
 from typing import Any, Callable, Dict, List, Optional, Union
+from importlib.metadata import version
 
 import torch
 
