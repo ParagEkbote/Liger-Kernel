@@ -24,6 +24,15 @@ implementations in PyTorch.
 !!! Example "Try it out"
     You can experiment as shown in this example [here](https://colab.research.google.com/drive/1CQYhul7MVG5F0gmqTBbx1O1HgolPgF0M?usp=sharing).
 
+### Function Signature
+
+::: liger_kernel.transformers.LigerRMSNorm
+    options:
+      extra:
+        show_docstring: true
+        show_signature: true
+        show_source: true
+
 ### RoPE
 
 RoPE (Rotary Position Embedding) enhances the positional encoding used in transformer models.
@@ -94,4 +103,12 @@ The implementation achieves significant speed improvements and memory savings co
 | **Kernel**                      | **API**                                                     |
 |---------------------------------|-------------------------------------------------------------|
 | Embedding                       | `liger_kernel.transformers.experimental.LigerEmbedding`     |
-| Matmul int2xint8                | `liger_kernel.transformers.experimental.matmul` |
+
+
+::: liger_kernel.transformers.experimental.LigerEmbedding
+    options:
+      extra:
+        show_docstring: true
+        show_signature: true
+        show_source: true
+
